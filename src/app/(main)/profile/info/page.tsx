@@ -9,8 +9,9 @@ import {
 } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Loader2, User as UserIcon } from "lucide-react";
+import { Loader2, MapPin, Package, User as UserIcon } from "lucide-react";
 import { API_BASE } from "@/lib/api-client";
+import { RequireAuth } from "@/components/RequireAuth";
 
 interface ProfileFormValues {
   name: string;
@@ -41,6 +42,8 @@ export default function ProfileInfoPage() {
     email: "",
     phone: "",
   });
+  const [initialForm, setInitialForm] = useState<ProfileFormValues | null>(null);
+  const [initialAvatarUrl, setInitialAvatarUrl] = useState<string | null>(null);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -75,9 +78,17 @@ export default function ProfileInfoPage() {
         email: data.email ?? "",
         phone: data.phone ?? "",
       });
+      setInitialForm({
+        name: data.name ?? "",
+        email: data.email ?? "",
+        phone: data.phone ?? "",
+      });
 
+      setInitialAvatarUrl(data.avatarUrl ?? null);
       if (data.avatarUrl) {
         setAvatarPreview(data.avatarUrl);
+      } else {
+        setAvatarPreview(null);
       }
     } catch (error) {
       console.error("Failed to fetch profile info", error);
@@ -89,20 +100,7 @@ export default function ProfileInfoPage() {
     loadProfile();
   }, [loadProfile]);
 
-  useEffect(() => {
-    // Reload when window regains focus
-    const handleFocus = () => {
-      void loadProfile();
-    };
-    if (typeof window !== "undefined") {
-      window.addEventListener("focus", handleFocus);
-    }
-    return () => {
-      if (typeof window !== "undefined") {
-        window.removeEventListener("focus", handleFocus);
-      }
-    };
-  }, [loadProfile]);
+  // Không reload lại profile theo window focus nữa để tránh ghi đè avatarPreview khi user vừa upload ảnh.
 
   const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -209,8 +207,21 @@ export default function ProfileInfoPage() {
     }
   };
 
+  const isDirty =
+    !!initialForm &&
+    (form.name !== initialForm.name ||
+      form.phone !== initialForm.phone ||
+      avatarFile !== null ||
+      initialAvatarUrl !== (avatarPreview ?? null));
+
+  const avatarPreviewSrc = avatarPreview
+    ? getAvatarUrl(avatarPreview)
+    : "/file.svg";
+
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 md:flex-row md:py-10 lg:py-12 bg-[var(--background)]">
+    <>
+      <RequireAuth />
+    <div className="mx-auto flex w-full max-w-7xl flex-col items-start gap-6 px-4 py-8 md:flex-row md:items-start md:px-8 md:py-10 lg:py-12 bg-[var(--background)]">
       {/* Mobile header + tabs */}
       <div className="md:hidden">
         <h1 className="text-xl font-semibold tracking-tight text-[var(--foreground)]">
@@ -243,14 +254,23 @@ export default function ProfileInfoPage() {
           </p>
         </div>
         <nav className="flex flex-col gap-0.5 px-2 py-3 text-sm">
-          <span className="flex w-full items-center rounded-lg px-3 py-2 text-left bg-[var(--primary)]/10 font-medium text-[var(--primary)]">
-            Thông tin tài khoản
+          <span className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left bg-[var(--primary)]/10 font-medium text-[var(--primary)]">
+            <UserIcon className="h-4 w-4" />
+            <span>Thông tin tài khoản</span>
           </span>
           <Link
             href="/profile/address"
-            className="flex w-full items-center rounded-lg px-3 py-2 text-left text-[var(--muted-foreground)] transition-colors hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
+            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[var(--muted-foreground)] transition-colors hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
           >
-            Địa chỉ nhận hàng
+            <MapPin className="h-4 w-4" />
+            <span>Địa chỉ nhận hàng</span>
+          </Link>
+          <Link
+            href="/profile/orders"
+            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[var(--muted-foreground)] transition-colors hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
+          >
+            <Package className="h-4 w-4" />
+            <span>Đơn mua</span>
           </Link>
         </nav>
       </aside>
@@ -272,12 +292,11 @@ export default function ProfileInfoPage() {
               <div className="flex flex-col items-center gap-4 md:w-1/3">
                 <div className="relative h-24 w-24 overflow-hidden rounded-full border border-[var(--border)] bg-[var(--muted)] shadow-sm ring-2 ring-[var(--primary)]/15">
                   {avatarPreview ? (
-                    <Image
-                      src={getAvatarUrl(avatarPreview)}
+                    <img
+                      key={avatarPreview}
+                      src={avatarPreviewSrc}
                       alt="Avatar preview"
-                      fill
-                      sizes="96px"
-                      className="object-cover"
+                      className="h-full w-full object-cover"
                     />
                   ) : (
                     <div className="flex h-full w-full items-center justify-center">
@@ -309,6 +328,11 @@ export default function ProfileInfoPage() {
                 <p className="text-xs text-center text-[var(--muted-foreground)]">
                   Hỗ trợ JPG, PNG, dung lượng tối đa 2MB.
                 </p>
+                {avatarFile && (
+                  <p className="text-xs text-center text-[var(--accent)]">
+                    Bạn vừa chọn ảnh mới. Bấm <span className="font-semibold">"Lưu thay đổi"</span> để cập nhật.
+                  </p>
+                )}
               </div>
 
               {/* Form */}
@@ -390,10 +414,15 @@ export default function ProfileInfoPage() {
                       {saveMessage}
                     </p>
                   )}
+                  {!saveMessage && !isDirty && (
+                    <p className="text-xs text-[var(--muted-foreground)]">
+                      Chưa có thay đổi nào. Hãy chỉnh sửa thông tin hoặc chọn ảnh để bật nút lưu.
+                    </p>
+                  )}
                   <button
                     type="submit"
-                    disabled={saving}
-                    className="inline-flex items-center justify-center rounded-full bg-[var(--primary)] px-5 py-2 text-sm font-medium text-[var(--primary-foreground)] shadow-sm transition-transform transition-colors hover:bg-[var(--primary)]/90 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)] disabled:cursor-not-allowed disabled:opacity-70"
+                    disabled={saving || !isDirty}
+                    className="inline-flex items-center justify-center rounded-full bg-[var(--primary)] px-5 py-2 text-sm font-medium text-[var(--primary-foreground)] shadow-sm transition-transform transition-colors hover:bg-[var(--primary)]/90 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)] disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     {saving && (
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -406,6 +435,7 @@ export default function ProfileInfoPage() {
           </section>
       </main>
     </div>
+    </>
   );
 }
 

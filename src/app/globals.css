@@ -1,4 +1,153 @@
 @import "tailwindcss";
+@import "swiper/css";
+@import "swiper/css/navigation";
+@import "swiper/css/pagination";
+
+:root {
+  --background: #f8f9fa;
+  --foreground: #34302d;
+  --primary: #6db33f;
+  --primary-light: color-mix(in srgb, var(--primary) 75%, white);
+  --header-bg: linear-gradient(
+    to bottom,
+    var(--primary) 0%,
+    var(--primary-light) 100%
+  );
+  --primary-foreground: #ffffff;
+  --secondary: #34302d;
+  --secondary-foreground: #f8f9fa;
+  --muted: #f8f9fa;
+  --muted-foreground: #34302d;
+  --accent: #009087;
+  --accent-foreground: #ffffff;
+  --destructive: #dc3545;
+  --destructive-foreground: #ffffff;
+  --border: #dee2e6;
+  --input: #dee2e6;
+  --ring: #009087;
+  --radius: 0.5rem;
+  --header-height: 8.5rem;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+  overflow-x: hidden;
+}
+
+.swiper {
+  width: 100%;
+  height: auto !important;
+}
+
+.swiper-wrapper {
+  height: auto;
+}
+
+.swiper-slide {
+  height: auto !important;
+  display: flex;
+}
+
+/* Banner secondary slider pagination */
+.banner-secondary-slider .swiper-pagination {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0.75rem;
+  z-index: 20;
+  display: flex;
+  justify-content: center;
+  gap: 0.35rem;
+  pointer-events: none;
+}
+
+.banner-secondary-slider .swiper-pagination-bullet {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: var(--primary);
+  opacity: 0.3;
+  pointer-events: auto;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.banner-secondary-slider .swiper-pagination-bullet-active {
+  opacity: 1;
+  transform: scale(1.15);
+}
+
+/* Đảm bảo card trong slider full width slide và canh thẳng hàng */
+.home-slider .swiper-slide {
+  height: auto !important;
+  display: flex;
+}
+
+.home-slider .swiper-slide > * {
+  width: 100%;
+}
+
+.home-slider {
+  padding-bottom: 2.25rem;
+}
+
+.home-slider-nav {
+  margin-top: 0.5rem;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.home-slider-nav-btn {
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 999px;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.2);
+  color: var(--primary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.1s ease,
+    opacity 0.15s ease;
+}
+
+.home-slider-nav-btn:hover {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border-color: transparent;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.22);
+  transform: translateY(-1px) scale(1.03);
+}
+
+.home-slider-nav-btn:active {
+  transform: translateY(0) scale(0.97);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.16);
+}
+
+.home-slider-nav-btn.swiper-button-disabled {
+  opacity: 0.3;
+  cursor: default;
+  box-shadow: none;
+  transform: none;
+}
+
+@import "tailwindcss";
+@import "swiper/css";
+@import "swiper/css/navigation";
 
 :root {
   /* Bảng màu thương hiệu */
@@ -7,7 +156,11 @@
 
   --primary: #6db33f; /* Spring Green - logo, nút chính */
   --primary-light: color-mix(in srgb, var(--primary) 75%, white);
-  --header-bg: linear-gradient(to bottom, var(--primary) 0%, var(--primary-light) 100%);
+  --header-bg: linear-gradient(
+    to bottom,
+    var(--primary) 0%,
+    var(--primary-light) 100%
+  );
   --primary-foreground: #ffffff;
 
   --secondary: #34302d; /* Header, tiêu đề */
@@ -32,8 +185,541 @@
   --header-height: 8.5rem;
 }
 
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+  overflow-x: hidden;
 }
+
+/* Swiper: width full content, height theo nội dung, không phóng full màn hình */
+.swiper {
+  width: 100%;
+  height: auto !important;
+}
+
+.swiper-wrapper {
+  height: auto;
+}
+
+.swiper-slide {
+  height: auto !important;
+  display: flex;
+}
+
+/* Home slider navigation – nhỏ, gọn, hiện đại, không đè lên card */
+.home-slider {
+  padding-bottom: 2.25rem; /* chừa chỗ cho navigation phía dưới */
+}
+
+.home-slider .swiper-button-prev,
+.home-slider .swiper-button-next {
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 999px;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12);
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  top: 100%;
+  bottom: auto;
+  transform: translateY(0);
+  margin-top: 0.6rem;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.1s ease,
+    opacity 0.15s ease;
+}
+
+.home-slider .swiper-button-prev::after,
+.home-slider .swiper-button-next::after {
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.home-slider .swiper-button-prev {
+  left: auto;
+  right: 2.4rem;
+}
+
+.home-slider .swiper-button-next {
+  right: 0.75rem;
+}
+
+.home-slider .swiper-button-prev:hover,
+.home-slider .swiper-button-next:hover {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border-color: transparent;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.18);
+  transform: translateY(-1px) scale(1.03);
+}
+
+.home-slider .swiper-button-prev:active,
+.home-slider .swiper-button-next:active {
+  transform: translateY(0) scale(0.98);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.14);
+}
+
+.home-slider .swiper-button-disabled {
+  opacity: 0.3;
+  cursor: default;
+  box-shadow: none;
+  transform: none;
+}
+
+@import "tailwindcss";
+@import "swiper/css";
+@import "swiper/css/navigation";
+
+:root {
+  /* Bảng màu thương hiệu */
+  --background: #f8f9fa;
+  --foreground: #34302d;
+
+  --primary: #6db33f;
+  --primary-light: color-mix(in srgb, var(--primary) 75%, white);
+  --header-bg: linear-gradient(
+    to bottom,
+    var(--primary) 0%,
+    var(--primary-light) 100%
+  );
+  --primary-foreground: #ffffff;
+
+  --secondary: #34302d;
+  --secondary-foreground: #f8f9fa;
+
+  --muted: #f8f9fa;
+  --muted-foreground: #34302d;
+
+  --accent: #009087;
+  --accent-foreground: #ffffff;
+
+  --destructive: #dc3545;
+  --destructive-foreground: #ffffff;
+
+  --border: #dee2e6;
+  --input: #dee2e6;
+  --ring: #009087;
+
+  --radius: 0.5rem;
+
+  --header-height: 8.5rem;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+  overflow-x: hidden;
+}
+
+/* Swiper layout */
+.swiper {
+  width: 100%;
+  height: auto !important;
+}
+
+.swiper-wrapper {
+  height: auto;
+}
+
+.swiper-slide {
+  height: auto !important;
+  display: flex;
+}
+
+/* Home slider navigation – modern, không đè lên card */
+.home-slider {
+  padding-bottom: 2.5rem;
+}
+
+.home-slider .swiper-button-prev,
+.home-slider .swiper-button-next {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 999px;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.06);
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  top: 100%;
+  bottom: auto;
+  transform: translateY(0);
+  margin-top: 0.75rem;
+}
+
+.home-slider .swiper-button-prev::after,
+.home-slider .swiper-button-next::after {
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.home-slider .swiper-button-prev {
+  left: auto;
+  right: 3rem;
+}
+
+.home-slider .swiper-button-next {
+  right: 0.75rem;
+}
+
+.home-slider .swiper-button-prev:hover,
+.home-slider .swiper-button-next:hover {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border-color: transparent;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+}
+
+.home-slider .swiper-button-disabled {
+  opacity: 0.35;
+  cursor: default;
+  box-shadow: none;
+}
+
+@import "tailwindcss";
+@import "swiper/css";
+@import "swiper/css/navigation";
+
+:root {
+  /* Bảng màu thương hiệu */
+  --background: #f8f9fa; /* Light Gray - nền trang */
+  --foreground: #34302d; /* Dark Charcoal - chữ chính */
+
+  --primary: #6db33f; /* Spring Green - logo, nút chính */
+  --primary-light: color-mix(in srgb, var(--primary) 75%, white);
+  --header-bg: linear-gradient(
+    to bottom,
+    var(--primary) 0%,
+    var(--primary-light) 100%
+  );
+  --primary-foreground: #ffffff;
+
+  --secondary: #34302d; /* Header, tiêu đề */
+  --secondary-foreground: #f8f9fa;
+
+  --muted: #f8f9fa; /* Nền card, vùng phụ */
+  --muted-foreground: #34302d;
+
+  --accent: #009087; /* Icon, link phụ */
+  --accent-foreground: #ffffff;
+
+  --destructive: #dc3545;
+  --destructive-foreground: #ffffff;
+
+  --border: #dee2e6; /* Viền, đường kẻ */
+  --input: #dee2e6;
+  --ring: #009087;
+
+  --radius: 0.5rem;
+
+  /* Chiều cao header (sticky) – dùng cho sidebar top / max-height */
+  --header-height: 8.5rem;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+  overflow-x: hidden;
+}
+
+/* Swiper: width full content, height theo nội dung, không phóng full màn hình */
+.swiper {
+  width: 100%;
+  height: auto !important;
+}
+
+.swiper-wrapper {
+  height: auto;
+}
+
+.swiper-slide {
+  height: auto !important;
+  display: flex;
+}
+
+/* Home slider navigation – dùng nút mặc định nhưng custom UI, không đè lên card */
+.home-slider {
+  padding-bottom: 2.5rem; /* chừa chỗ để nút nằm phía dưới */
+}
+
+.home-slider .swiper-button-prev,
+.home-slider .swiper-button-next {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 999px;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.06);
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  top: 100%;
+  bottom: auto;
+  transform: translateY(0);
+  margin-top: 0.75rem;
+}
+
+.home-slider .swiper-button-prev::after,
+.home-slider .swiper-button-next::after {
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.home-slider .swiper-button-prev {
+  left: auto;
+  right: 3rem;
+}
+
+.home-slider .swiper-button-next {
+  right: 0.75rem;
+}
+
+.home-slider .swiper-button-prev:hover,
+.home-slider .swiper-button-next:hover {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border-color: transparent;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+}
+
+.home-slider .swiper-button-disabled {
+  opacity: 0.35;
+  cursor: default;
+  box-shadow: none;
+}
+
+@import "tailwindcss";
+@import "swiper/css";
+@import "swiper/css/navigation";
+
+:root {
+  /* Bảng màu thương hiệu */
+  --background: #f8f9fa; /* Light Gray - nền trang */
+  --foreground: #34302d; /* Dark Charcoal - chữ chính */
+
+  --primary: #6db33f; /* Spring Green - logo, nút chính */
+  --primary-light: color-mix(in srgb, var(--primary) 75%, white);
+  --header-bg: linear-gradient(
+    to bottom,
+    var(--primary) 0%,
+    var(--primary-light) 100%
+  );
+  --primary-foreground: #ffffff;
+
+  --secondary: #34302d; /* Header, tiêu đề */
+  --secondary-foreground: #f8f9fa;
+
+  --muted: #f8f9fa; /* Nền card, vùng phụ */
+  --muted-foreground: #34302d;
+
+  --accent: #009087; /* Icon, link phụ */
+  --accent-foreground: #ffffff;
+
+  --destructive: #dc3545;
+  --destructive-foreground: #ffffff;
+
+  --border: #dee2e6; /* Viền, đường kẻ */
+  --input: #dee2e6;
+  --ring: #009087;
+
+  --radius: 0.5rem;
+
+  /* Chiều cao header (sticky) – dùng cho sidebar top / max-height */
+  --header-height: 8.5rem;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+  overflow-x: hidden;
+}
+
+/* Swiper: width full content, height theo nội dung, không phóng full màn hình */
+.swiper {
+  width: 100%;
+  height: auto !important;
+}
+
+.swiper-wrapper {
+  height: auto;
+}
+
+.swiper-slide {
+  height: auto !important;
+  display: flex;
+}
+
+.home-slider-nav {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  transform: none;
+  z-index: 10;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 0.25rem;
+  pointer-events: none;
+}
+
+.home-slider-nav-btn {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 999px;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.06);
+  color: var(--primary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  pointer-events: auto;
+  position: relative;
+  top: -5%;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.1s ease;
+}
+
+.home-slider-nav-btn:hover {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border-color: transparent;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+  transform: translateY(-1px);
+}
+
+.home-slider-nav-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.home-slider-nav-btn.swiper-button-disabled {
+  opacity: 0.35;
+  cursor: default;
+  box-shadow: none;
+}
+
+/* Home slider navigation – refined size & hover */
+.home-slider .swiper-button-prev,
+.home-slider .swiper-button-next {
+  width: 1.9rem;
+  height: 1.9rem;
+  border-radius: 999px;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12);
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  top: 100%;
+  bottom: auto;
+  transform: translateY(0);
+  margin-top: 0.6rem;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.1s ease,
+    opacity 0.15s ease;
+}
+
+.home-slider .swiper-button-prev::after,
+.home-slider .swiper-button-next::after {
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.home-slider .swiper-button-prev::after {
+  content: "‹";
+}
+
+.home-slider .swiper-button-next::after {
+  content: "›";
+}
+
+.home-slider .swiper-button-prev {
+  left: auto;
+  right: 2.6rem;
+}
+
+.home-slider .swiper-button-next {
+  right: 0.9rem;
+}
+
+.home-slider .swiper-button-prev:hover,
+.home-slider .swiper-button-next:hover {
+  background: radial-gradient(circle at 30% 0%, #ffffff 0, var(--primary) 55%);
+  color: var(--primary-foreground);
+  border-color: transparent;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.18);
+  transform: translateY(-1px) scale(1.03);
+}
+
+.home-slider .swiper-button-prev:active,
+.home-slider .swiper-button-next:active {
+  transform: translateY(0) scale(0.99);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.14);
+}
+
+.home-slider .swiper-button-disabled {
+  opacity: 0.25;
+  cursor: default;
+  box-shadow: none;
+  transform: none;
+}
+
+/* Background tổng thể – trở lại màu cơ bản */
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+  overflow-x: hidden;
+}
+

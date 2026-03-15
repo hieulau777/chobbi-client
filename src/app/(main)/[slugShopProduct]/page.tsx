@@ -5,7 +5,14 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
+import { Loader2, Store } from "lucide-react";
 import { api } from "@/lib/axios";
+import { resolveBackendFileUrl } from "@/lib/file-url";
+import {
+  CategoryProductSection,
+  type ProductCardDto,
+  type SimpleCategory,
+} from "@/app/(main)/page";
 
 type CategoryDto = {
   id: number;
@@ -59,6 +66,9 @@ type ReadProductClientDto = {
   productId: number;
   productName: string;
   description: string;
+  shopId: number | null;
+  shopName: string | null;
+  shopAvatar: string | null;
   images: ReadProductImageDto[];
   tiers: ReadProductTierDto[];
   optionImages: ReadProductOptionImagesDto[];
@@ -66,6 +76,14 @@ type ReadProductClientDto = {
   categoryTree: CategoryDto[];
   selectedCategoryId: number | null;
   variations: ReadProductVariationDto[];
+};
+
+type ProductCardListPageDto = {
+  content: ProductCardDto[];
+  totalPages: number;
+  totalElements: number;
+  number: number;
+  size: number;
 };
 
 type PageProps = {
@@ -80,15 +98,6 @@ const formatPrice = (value: number) =>
     currency: "VND",
     maximumFractionDigits: 0,
   }).format(value);
-
-const FILE_BASE_URL = "http://localhost:9090/static";
-
-const resolveImageUrl = (url: string | null | undefined): string => {
-  if (!url) return "/file.svg";
-  if (url.startsWith("http://") || url.startsWith("https://")) return url;
-  if (url.startsWith("/")) return url;
-  return `${FILE_BASE_URL}/${url}`;
-};
 
 function findCategoryPath(
   tree: CategoryDto[],
@@ -144,6 +153,9 @@ export default function ProductDetailPage({ params }: PageProps) {
   const [quantity, setQuantity] = useState(1);
   const [hoverImage, setHoverImage] = useState<string | null>(null);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [addingToCart, setAddingToCart] = useState(false);
+  const [addToCartSuccess, setAddToCartSuccess] = useState(false);
+  const [relatedProducts, setRelatedProducts] = useState<ProductCardDto[]>([]);
 
   const { slug, shopId, productId } = useMemo(() => {
     const raw = slugShopProduct;
@@ -167,7 +179,7 @@ export default function ProductDetailPage({ params }: PageProps) {
 
   useEffect(() => {
     if (!productId) {
-      setError("URL không hợp lệ (thiếu productId).");
+      setError("Không tìm thấy trang bạn yêu cầu.");
       setLoading(false);
       return;
     }
@@ -184,6 +196,40 @@ export default function ProductDetailPage({ params }: PageProps) {
         setProduct(res.data);
         setSelectedOptions({});
         setQuantity(1);
+
+        // Lấy thêm sản phẩm liên quan theo danh mục root (tối đa 7 sản phẩm)
+        try {
+          const categoryTree = res.data.categoryTree ?? [];
+          const selectedCategoryId = res.data.selectedCategoryId;
+          const path = findCategoryPath(categoryTree, selectedCategoryId);
+          let rootCategory: SimpleCategory | null = null;
+          if (path.length > 0) {
+            const root = path[0];
+            rootCategory = { id: root.id, name: root.name };
+          }
+          if (rootCategory) {
+            const listRes = await api.get<ProductCardListPageDto>(
+              "/product/list",
+              {
+                params: {
+                  categoryId: rootCategory.id,
+                  page: 0,
+                  size: 7,
+                },
+              },
+            );
+            const data = Array.isArray(listRes.data?.content)
+              ? listRes.data.content
+              : [];
+            setRelatedProducts(
+              data.filter((p) => p.productId !== res.data.productId),
+            );
+          } else {
+            setRelatedProducts([]);
+          }
+        } catch {
+          setRelatedProducts([]);
+        }
       } catch (e: any) {
         if (cancelled) return;
         setError(
@@ -215,7 +261,7 @@ export default function ProductDetailPage({ params }: PageProps) {
     return [...product.images]
       .map((img) => ({
         ...img,
-        url: resolveImageUrl(img.url),
+        url: resolveBackendFileUrl(img.url),
       }))
       .sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0));
   }, [product]);
@@ -225,22 +271,42 @@ export default function ProductDetailPage({ params }: PageProps) {
 
   const carouselImages = useMemo(() => {
     if (images.length === 0) return [];
-    const targetCount = Math.min(5, Math.max(1, images.length));
+
+    // 1. Ảnh sản phẩm chính (đã resolve URL)
+    const base = [...images];
+
+    // 2. Thêm tất cả ảnh option (tier hasImages) vào danh sách thumbnail
+    const optionThumbs: ReadProductImageDto[] = [];
+    if (product?.optionImages?.length) {
+      const seenUrls = new Set<string>();
+      for (const item of product.optionImages) {
+        const url = resolveBackendFileUrl(item.url);
+        if (!url || seenUrls.has(url)) continue;
+        seenUrls.add(url);
+        optionThumbs.push({
+          id: -item.optionId, // id ảo, chỉ dùng để key
+          url,
+          sort: null,
+        });
+      }
+    }
+
+    const combined = [...base, ...optionThumbs];
+
+    // 3. Giới hạn tối đa 8 thumbnail để UI gọn
+    const targetCount = Math.min(8, Math.max(1, combined.length));
     const result: ReadProductImageDto[] = [];
     for (let i = 0; i < targetCount; i++) {
-      result.push(images[i % images.length]);
+      result.push(combined[i]);
     }
     return result;
-  }, [images]);
+  }, [images, product]);
 
   const optionImageMap = useMemo(() => {
     const map = new Map<string, string>();
     if (!product) return map;
     for (const item of product.optionImages) {
-      map.set(
-        `${item.tierId}:${item.optionId}`,
-        resolveImageUrl(item.url)
-      );
+      map.set(`${item.tierId}:${item.optionId}`, resolveBackendFileUrl(item.url));
     }
     return map;
   }, [product]);
@@ -341,6 +407,17 @@ export default function ProductDetailPage({ params }: PageProps) {
     setQuantity(Math.min(num, max));
   };
 
+  const redirectToLogin = () => {
+    if (typeof window === "undefined") return;
+    const currentPath = window.location.pathname + window.location.search;
+    const params = new URLSearchParams();
+    if (currentPath && currentPath !== "/") {
+      params.set("redirect", currentPath);
+    }
+    const query = params.toString();
+    router.push(query ? `/login?${query}` : "/login");
+  };
+
   const handleAddToCart = async () => {
     if (!selectedVariation) {
       alert("Vui lòng chọn đầy đủ phân loại trước khi thêm vào giỏ hàng.");
@@ -352,26 +429,54 @@ export default function ProductDetailPage({ params }: PageProps) {
     }
     const token = getBackendToken(session, true);
     if (!token) {
-      alert("Vui lòng đăng nhập để thêm vào giỏ hàng.");
+      redirectToLogin();
       return;
     }
     try {
+      setAddingToCart(true);
+      setAddToCartSuccess(false);
       await api.post(
         "/cart/add",
         { variationId: selectedVariation.id, quantity },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      alert("Đã thêm vào giỏ hàng.");
+      setAddToCartSuccess(true);
+
+      // Cập nhật mini-cart local ngay (không gọi lại API)
+      if (typeof window !== "undefined" && product) {
+        const mainImage =
+          selectedImage ??
+          hoverImage ??
+          product.images?.[0]?.url ??
+          null;
+
+        window.dispatchEvent(
+          new CustomEvent("chobbi:cart:added", {
+            detail: {
+              productId: product.productId,
+              productName: product.productName,
+              imageUrl: mainImage,
+              price: selectedVariation.price ?? null,
+            },
+          }),
+        );
+      }
+
+      // Tự ẩn thông báo sau 2.5s
+      setTimeout(() => setAddToCartSuccess(false), 2500);
     } catch (e: any) {
       const status = e?.response?.status;
       const message = e?.response?.data?.message ?? e?.response?.data;
       if (status === 401) {
         alert(message || "Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.");
+        redirectToLogin();
         return;
       }
       alert(
         typeof message === "string" ? message : "Không thể thêm vào giỏ hàng. Vui lòng thử lại."
       );
+    } finally {
+      setAddingToCart(false);
     }
   };
 
@@ -395,8 +500,19 @@ export default function ProductDetailPage({ params }: PageProps) {
   if (error || !product) {
     return (
       <div className="mx-auto flex min-h-[60vh] max-w-7xl items-center justify-center px-4">
-        <div className="rounded-md bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error ?? "Không tìm thấy sản phẩm."}
+        <div className="flex w-full max-w-md flex-col items-center gap-4 rounded-2xl bg-white p-6 text-center shadow-sm ring-1 ring-[var(--border)]/60">
+          <h1 className="text-3xl font-bold tracking-tight text-[var(--foreground)]">
+            404
+          </h1>
+          <p className="text-sm text-[var(--muted-foreground)]">
+            Không tìm thấy trang bạn yêu cầu.
+          </p>
+          <Link
+            href="/"
+            className="mt-2 inline-flex items-center justify-center rounded-full bg-[var(--primary)] px-5 py-2.5 text-sm font-semibold text-[var(--primary-foreground)] shadow-sm transition-colors hover:bg-[var(--primary)]/90"
+          >
+            Về trang chủ
+          </Link>
         </div>
       </div>
     );
@@ -406,29 +522,35 @@ export default function ProductDetailPage({ params }: PageProps) {
   const reviewCount = 123;
 
   return (
-    <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-4 md:py-6">
+    <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-4 md:py-8 bg-[var(--background)]">
       <nav className="text-xs text-muted-foreground md:text-sm">
-        <span
-          className="cursor-pointer text-accent hover:underline"
-          onClick={() => router.push("/")}
+        <Link
+          href="/"
+          className="cursor-pointer text-[var(--primary)] font-medium hover:underline underline-offset-2"
         >
-          Home
-        </span>
+          Trang chủ
+        </Link>
         {breadcrumbItems.map((cat) => (
           <span key={cat.id}>
             {" "}
-            &gt; <span>{cat.name}</span>
+            &gt;{" "}
+            <Link
+              href={`/category/${cat.id}`}
+              className="cursor-pointer text-[var(--primary)] font-medium hover:underline underline-offset-2"
+            >
+              {cat.name}
+            </Link>
           </span>
         ))}
         <span> &gt; </span>
-        <span className="font-semibold text-foreground">
+        <span className="text-[var(--foreground)]">
           {product.productName}
         </span>
       </nav>
 
-      <div className="grid gap-8 md:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] bg-white px-6 py-6">
+      <div className="grid gap-8 rounded-2xl border border-[var(--border)]/70 bg-white/95 px-4 py-5 shadow-sm md:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] md:px-6 md:py-6 md:shadow-md">
         <div className="space-y-4">
-          <div className="relative w-full h-64 md:h-80 overflow-hidden rounded-lg bg-white">
+          <div className="relative h-64 w-full overflow-hidden rounded-2xl bg-[var(--muted)]/60 md:h-80">
             <Image
               src={displayMainImage}
               alt={product.productName}
@@ -481,7 +603,7 @@ export default function ProductDetailPage({ params }: PageProps) {
             </div>
           </div>
 
-          <div className="rounded-lg bg-white p-4 shadow-sm">
+          <div className="rounded-2xl bg-gradient-to-r from-[var(--primary)]/5 via-white to-white p-4 shadow-sm">
             {displayPrice != null ? (
               <div className="flex items-baseline gap-3">
                 {originalPrice && originalPrice > displayPrice ? (
@@ -522,7 +644,7 @@ export default function ProductDetailPage({ params }: PageProps) {
             )}
           </div>
 
-          <div className="space-y-4 rounded-lg bg-white p-4 shadow-sm">
+          <div className="space-y-4 rounded-2xl bg-white/95 p-4 shadow-sm">
             {product.tiers?.map((tier) => (
               <div key={tier.id} className="space-y-2">
                 <div className="text-sm font-medium">{tier.name}</div>
@@ -574,62 +696,89 @@ export default function ProductDetailPage({ params }: PageProps) {
               </div>
             ))}
 
-            <div className="mt-4 flex flex-wrap items-center gap-4 border-t border-dashed border-border pt-4">
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">
-                  Số lượng
-                </span>
+            <div className="mt-5 rounded-xl bg-[var(--muted)]/40 px-3 py-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-sm text-muted-foreground">Số lượng</span>
                 <input
                   type="number"
                   min={1}
                   value={quantity}
                   onChange={(e) => handleQuantityChange(e.target.value)}
-                  className="w-20 rounded-md border border-input bg-white px-2 py-1 text-sm"
+                  className="w-24 rounded-full border border-input bg-white px-3 py-1.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)] focus:ring-offset-1 focus:ring-offset-[var(--background)]"
                 />
                 {selectedVariation && (
                   <span className="text-xs text-muted-foreground">
                     Còn lại: {selectedVariation.stock}
                   </span>
                 )}
+                <button
+                  type="button"
+                  onClick={handleAddToCart}
+                  className="inline-flex items-center justify-center rounded-full bg-[var(--primary)] px-5 py-2 text-sm font-semibold text-[var(--primary-foreground)] shadow-sm transition hover:bg-[var(--primary)]/90 disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={
+                    addingToCart ||
+                    !selectedVariation ||
+                    (selectedVariation?.stock ?? 0) <= 0
+                  }
+                >
+                  {addingToCart ? (
+                    <>
+                      <Loader2
+                        className="mr-2 h-4 w-4 animate-spin"
+                        aria-hidden
+                      />
+                      Đang thêm...
+                    </>
+                  ) : (
+                    "Thêm vào giỏ hàng"
+                  )}
+                </button>
               </div>
-
-              <button
-                type="button"
-                onClick={handleAddToCart}
-                className="rounded-full bg-[var(--primary)] px-6 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[var(--primary)]/90 disabled:cursor-not-allowed disabled:opacity-60"
-                disabled={!selectedVariation || (selectedVariation?.stock ?? 0) <= 0}
-              >
-                Thêm vào giỏ hàng
-              </button>
+              {addToCartSuccess && (
+                <p className="mt-2 text-xs font-medium text-emerald-600">
+                  Đã thêm vào giỏ hàng.
+                </p>
+              )}
             </div>
           </div>
 
-          <div className="space-y-3 rounded-lg bg-white p-4 shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="relative h-10 w-10 overflow-hidden rounded-full border border-border bg-muted">
-                <Image
-                  src="/logo-green-3.png"
-                  alt="Shop avatar"
-                  fill
-                  sizes="40px"
-                  className="object-contain"
-                />
+          <div className="rounded-2xl border border-[var(--border)]/70 bg-gradient-to-r from-[var(--muted)]/40 via-white to-white p-4 shadow-sm md:p-5">
+            <div className="flex items-center gap-4">
+              <div className="relative h-11 w-11 overflow-hidden rounded-full border border-border bg-muted shadow-sm">
+                {product.shopAvatar ? (
+                  <Image
+                    src={resolveBackendFileUrl(product.shopAvatar)}
+                    alt={product.shopName ?? "Shop"}
+                    fill
+                    sizes="44px"
+                    className="object-cover"
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center">
+                    <Store className="h-5 w-5 text-[var(--muted-foreground)]" />
+                  </div>
+                )}
               </div>
-              <div className="flex flex-col text-sm">
-                <span className="font-semibold">
-                  Shop #{shopId ?? "?"}
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  Tổng sản phẩm: đang cập nhật
-                </span>
+              <div className="min-w-0 flex-1 text-sm">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="truncate text-[15px] font-semibold text-[var(--foreground)]">
+                    {product.shopName ?? "Shop"}
+                  </span>
+                  <span className="rounded-full bg-[var(--muted)]/70 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
+                    Gian hàng
+                  </span>
+                </div>
+                <p className="mt-1 line-clamp-2 text-xs text-[var(--muted-foreground)]">
+                  Khám phá thêm các sản phẩm tương tự và ưu đãi khác từ shop này.
+                </p>
               </div>
               <div className="ml-auto">
-                {shopId && (
+                {(product.shopId ?? shopId) && (
                   <Link
-                    href={`/shop/${shopId}`}
-                    className="rounded-full border border-[var(--primary)] px-4 py-1.5 text-xs font-medium text-[var(--primary)] hover:bg-[var(--primary)]/5"
+                    href={`/shop/${product.shopId ?? shopId}`}
+                    className="inline-flex items-center justify-center rounded-full border border-[var(--primary)] px-4 py-1.5 text-xs font-semibold text-[var(--primary)] shadow-sm transition hover:bg-[var(--primary)]/5"
                   >
-                    Xem Shop
+                    Xem shop
                   </Link>
                 )}
               </div>
@@ -638,33 +787,35 @@ export default function ProductDetailPage({ params }: PageProps) {
         </div>
       </div>
 
-      <div className="mx-auto mt-4 flex w-full max-w-7xl flex-col gap-4 px-4 pb-8">
-        <section className="rounded-lg bg-white p-4 shadow-sm">
+      <div className="mx-auto mt-4 flex w-full max-w-7xl flex-col gap-4 px-1 pb-10 sm:px-4">
+        <section className="rounded-2xl border border-[var(--border)]/60 bg-white/95 p-4 shadow-sm md:p-6">
           <h2 className="mb-3 text-base font-semibold md:text-lg">
             Thông số sản phẩm
           </h2>
-          <div className="overflow-hidden rounded-md border border-border">
-            <table className="min-w-full border-collapse text-sm">
-              <tbody>
-                {product.attributes.map((attr) => (
-                  <tr
-                    key={attr.name}
-                    className="border-b border-border last:border-0"
-                  >
-                    <td className="w-1/3 bg-muted px-3 py-2 font-medium">
-                      {attr.name}
-                    </td>
-                    <td className="px-3 py-2">
-                      {attr.value || "-"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          {product.attributes.length === 0 ? (
+            <p className="text-sm text-[var(--muted-foreground)]">
+              Thông số chi tiết đang được cập nhật.
+            </p>
+          ) : (
+            <dl className="grid grid-cols-1 gap-x-8 gap-y-3 text-sm md:grid-cols-2">
+              {product.attributes.map((attr) => (
+                <div
+                  key={attr.name}
+                  className="flex flex-col rounded-xl bg-[var(--muted)]/40 px-3 py-2.5"
+                >
+                  <dt className="text-xs font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
+                    {attr.name}
+                  </dt>
+                  <dd className="mt-1 text-[var(--foreground)]">
+                    {attr.value || "-"}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          )}
         </section>
 
-        <section className="rounded-lg bg-white p-4 shadow-sm">
+        <section className="rounded-2xl border border-[var(--border)]/60 bg-white/95 p-4 shadow-sm md:p-6">
           <h2 className="mb-3 text-base font-semibold md:text-lg">
             Mô tả sản phẩm
           </h2>
@@ -672,6 +823,25 @@ export default function ProductDetailPage({ params }: PageProps) {
             {product.description}
           </p>
         </section>
+
+        {relatedProducts.length > 0 && (
+          <CategoryProductSection
+            category={{
+              id:
+                findCategoryPath(
+                  product.categoryTree || [],
+                  product.selectedCategoryId,
+                )[0]?.id ?? 0,
+              name:
+                findCategoryPath(
+                  product.categoryTree || [],
+                  product.selectedCategoryId,
+                )[0]?.name ?? "Sản phẩm cùng danh mục",
+            }}
+            products={relatedProducts}
+            titleOverride="Sản phẩm tương tự"
+          />
+        )}
       </div>
     </div>
   );

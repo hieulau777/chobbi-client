@@ -50,20 +50,21 @@ export function AlertTokenAfterAuth() {
           if (typeof window !== "undefined") {
             window.localStorage.setItem("chobbi_backend_token", data.token);
           }
-          await update({ backendToken: data.token, accountId: data.accountId, roles: data.roles });
-          alert(`Đăng nhập thành công. Token đã lưu vào phiên.`);
+          await update({
+            backendToken: data.token,
+            accountId: data.accountId,
+            roles: data.roles,
+          });
         } else {
-          console.error("[AlertTokenAfterAuth] Backend response:", res.status, data);
-          alert(
-            `Backend lỗi ${res.status}: ${data.message ?? JSON.stringify(data)}`
+          console.error(
+            "[AlertTokenAfterAuth] Backend response:",
+            res.status,
+            data,
           );
         }
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
-        console.error("[AlertTokenAfterAuth] Fetch failed:", url, e);
-        alert(
-          `Gọi backend thất bại. Kiểm tra:\n1. Backend đã chạy (port 9090)?\n2. Restart Next.js sau khi sửa next.config?\n\nLỗi: ${msg}`
-        );
+        console.error("[AlertTokenAfterAuth] Fetch failed:", url, msg);
       } finally {
         window.history.replaceState(null, "", "/");
       }

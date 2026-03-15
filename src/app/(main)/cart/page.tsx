@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/axios";
+import { resolveBackendFileUrl } from "@/lib/file-url";
 import { SHIPPING_METHODS, calcShippingFee } from "@/lib/shipping";
 import type { CheckoutDraft } from "@/types/checkout";
 import { setCheckoutDraft } from "@/types/checkout";
@@ -27,6 +28,8 @@ type CartItemDto = {
   /** Trọng lượng sản phẩm (gram) - để tính phí vận chuyển theo lựa chọn. */
   weight?: number;
   variationOptions?: VariationOptionDisplayDto[];
+  /** Nếu true: sản phẩm/biến thể đã bị xóa hoặc ngừng bán, chỉ hiển thị nhưng không cho chọn/checkout. */
+  disabled?: boolean;
 };
 
 /** Option từ API get-cart (có công thức để client tính lại theo weight đã chọn). */
@@ -69,15 +72,6 @@ type GetCartResponseDto = {
   shops: CartShopGroupDto[];
 };
 
-const FILE_BASE_URL = "http://localhost:9090/static";
-
-function resolveImageUrl(url: string | null | undefined): string {
-  if (!url) return "/file.svg";
-  if (url.startsWith("http://") || url.startsWith("https://")) return url;
-  if (url.startsWith("/")) return url;
-  return `${FILE_BASE_URL}/${url}`;
-}
-
 const formatPrice = (value: number) =>
   new Intl.NumberFormat("vi-VN", {
     style: "currency",
@@ -98,8 +92,19 @@ function getBackendToken(
 
 function getAllCartVariationIds(shops: CartShopGroupDto[]): number[] {
   const ids: number[] = [];
-  shops.forEach((s) => s.items.forEach((i) => ids.push(i.cartVariationId)));
+  shops.forEach((s) =>
+    s.items.forEach((i) => {
+      if (!i.disabled) ids.push(i.cartVariationId);
+    }),
+  );
   return ids;
+}
+
+async function deleteCartItem(cartVariationId: number, token: string | null) {
+  if (!token) return;
+  await api.delete(`/cart/item/${cartVariationId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
 }
 
 export default function CartPage() {
@@ -187,7 +192,7 @@ export default function CartPage() {
   }, []);
 
   const toggleShop = useCallback((shop: CartShopGroupDto) => {
-    const ids = shop.items.map((i) => i.cartVariationId);
+    const ids = shop.items.filter((i) => !i.disabled).map((i) => i.cartVariationId);
     const allSelected = ids.every((id) => selectedIds.has(id));
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -205,11 +210,13 @@ export default function CartPage() {
   }, [cart?.shops, selectedIds]);
 
   const isShopAllSelected = useCallback(
-    (shop: CartShopGroupDto) => shop.items.every((i) => selectedIds.has(i.cartVariationId)),
+    (shop: CartShopGroupDto) =>
+      shop.items.filter((i) => !i.disabled).every((i) => selectedIds.has(i.cartVariationId)),
     [selectedIds]
   );
   const isShopSomeSelected = useCallback(
-    (shop: CartShopGroupDto) => shop.items.some((i) => selectedIds.has(i.cartVariationId)),
+    (shop: CartShopGroupDto) =>
+      shop.items.filter((i) => !i.disabled).some((i) => selectedIds.has(i.cartVariationId)),
     [selectedIds]
   );
 
@@ -253,6 +260,41 @@ export default function CartPage() {
   const selectedShopCount = cart
     ? cart.shops.filter((s) => s.items.some((i) => selectedIds.has(i.cartVariationId))).length
     : 0;
+
+  const handleRemoveItem = useCallback(
+    async (cartVariationId: number, productId: number) => {
+      if (!token) return;
+      // Optimistic update UI trước
+      setCart((prev) => {
+        if (!prev) return prev;
+        const nextShops = prev.shops
+          .map((s) => ({
+            ...s,
+            items: s.items.filter((i) => i.cartVariationId !== cartVariationId),
+          }))
+          .filter((s) => s.items.length > 0);
+        return { shops: nextShops };
+      });
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(cartVariationId);
+        return next;
+      });
+      try {
+        await deleteCartItem(cartVariationId, token);
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("chobbi:cart:removed", {
+              detail: { productId },
+            }),
+          );
+        }
+      } catch {
+        // Nếu lỗi server, lần load lại /cart sau sẽ đồng bộ lại
+      }
+    },
+    [token],
+  );
 
   if (status === "loading" || loading) {
     return (
@@ -428,30 +470,40 @@ export default function CartPage() {
                   </div>
                   <ul className="divide-y divide-[var(--border)]">
                     {shop.items.map((item) => {
+                    const disabled = item.disabled;
                       const checked = selectedIds.has(item.cartVariationId);
                       return (
                         <li
                           key={item.cartVariationId}
-                          className="flex gap-4 p-5 transition hover:bg-[var(--muted)]/30"
+                        className={`flex gap-4 p-5 transition ${
+                          disabled
+                            ? "bg-[var(--muted)]/20 opacity-70"
+                            : "hover:bg-[var(--muted)]/30"
+                        }`}
                         >
                           <button
                             type="button"
                             role="checkbox"
-                            aria-checked={checked}
-                            onClick={() => toggleItem(item.cartVariationId)}
-                            className="mt-1 flex h-5 w-5 shrink-0 items-center justify-center self-start rounded border-2 border-[var(--border)] transition hover:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)] focus:ring-offset-2"
+                          aria-checked={checked && !disabled}
+                          aria-disabled={disabled}
+                          onClick={() => {
+                            if (!disabled) toggleItem(item.cartVariationId);
+                          }}
+                          className="mt-1 flex h-5 w-5 shrink-0 items-center justify-center self-start rounded border-2 border-[var(--border)] transition hover:border-[var(--primary)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)] focus:ring-offset-2 disabled:cursor-not-allowed"
                             style={{
-                              background: checked ? "var(--primary)" : "transparent",
-                              borderColor: checked ? "var(--primary)" : undefined,
+                            background:
+                              checked && !disabled ? "var(--primary)" : "transparent",
+                            borderColor:
+                              checked && !disabled ? "var(--primary)" : undefined,
                             }}
                           >
-                            {checked ? (
+                          {checked && !disabled ? (
                               <Check className="h-3 w-3 text-white" strokeWidth={3} />
                             ) : null}
                           </button>
                           <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-xl bg-[var(--muted)] md:h-28 md:w-28">
                             <Image
-                              src={resolveImageUrl(item.imageUrl)}
+                              src={resolveBackendFileUrl(item.imageUrl)}
                               alt={item.productName}
                               fill
                               sizes="112px"
@@ -460,12 +512,31 @@ export default function CartPage() {
                             />
                           </div>
                           <div className="min-w-0 flex-1">
-                            <Link
-                              href={`/shop/${shop.shopId}`}
-                              className="font-medium text-[var(--foreground)] line-clamp-2 hover:text-[var(--accent)]"
-                            >
-                              {item.productName}
-                            </Link>
+                            <div className="flex items-start justify-between gap-3">
+                              <Link
+                                href={`/shop/${shop.shopId}`}
+                                className="flex-1 text-sm font-medium text-[var(--foreground)] line-clamp-2 hover:text-[var(--accent)]"
+                              >
+                                {item.productName}
+                              </Link>
+                              {disabled && (
+                                <span className="ml-2 rounded-full bg-[var(--muted)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                                  Đã ngừng bán
+                                </span>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleRemoveItem(
+                                    item.cartVariationId,
+                                    item.productId,
+                                  )
+                                }
+                                className="ml-3 inline-flex cursor-pointer items-center rounded-full bg-[var(--muted)]/60 px-3 py-1 text-xs font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[var(--destructive)] hover:text-white"
+                              >
+                                Xóa
+                              </button>
+                            </div>
                             {item.variationOptions && item.variationOptions.length > 0 && (
                               <div className="mt-2 flex flex-wrap gap-1.5">
                                 {item.variationOptions.map((o, idx) => (

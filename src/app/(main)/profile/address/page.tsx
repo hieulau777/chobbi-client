@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
+import { MapPin, Package, User as UserIcon } from "lucide-react";
 import { API_BASE } from "@/lib/api-client";
+import { RequireAuth } from "@/components/RequireAuth";
 
 interface AddressResponse {
   id: number;
@@ -365,7 +368,9 @@ export default function ProfileAddressPage() {
   };
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 md:flex-row md:py-10 lg:py-12 bg-[var(--background)]">
+    <>
+      <RequireAuth />
+      <div className="mx-auto flex w-full max-w-7xl flex-col items-start gap-6 px-4 py-8 md:flex-row md:items-start md:px-8 md:py-10 lg:py-12 bg-[var(--background)]">
       {/* Left shell menu (copy from profile/info) */}
       <aside className="hidden w-64 flex-shrink-0 rounded-2xl border border-[var(--border)] bg-white shadow-sm md:block">
         <div className="border-b border-[var(--border)] px-4 py-4">
@@ -377,15 +382,24 @@ export default function ProfileAddressPage() {
           </p>
         </div>
         <nav className="flex flex-col gap-0.5 px-2 py-3 text-sm">
-          <a
+          <Link
             href="/profile/info"
-            className="flex w-full items-center rounded-lg px-3 py-2 text-left text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
+            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
           >
-            Thông tin tài khoản
-          </a>
-          <span className="flex w-full items-center rounded-lg px-3 py-2 text-left bg-[var(--primary)]/10 font-medium text-[var(--primary)]">
-            Địa chỉ nhận hàng
+            <UserIcon className="h-4 w-4" />
+            <span>Thông tin tài khoản</span>
+          </Link>
+          <span className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left bg-[var(--primary)]/10 font-medium text-[var(--primary)]">
+            <MapPin className="h-4 w-4" />
+            <span>Địa chỉ nhận hàng</span>
           </span>
+          <Link
+            href="/profile/orders"
+            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
+          >
+            <Package className="h-4 w-4" />
+            <span>Đơn mua</span>
+          </Link>
         </nav>
       </aside>
 
@@ -666,6 +680,7 @@ export default function ProfileAddressPage() {
         </div>
       )}
     </div>
+    </>
   );
 }
 

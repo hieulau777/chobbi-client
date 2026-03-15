@@ -1,14 +1,15 @@
 import type { NextConfig } from "next";
 
 const backendUrl = process.env.BACKEND_URL ?? "http://localhost:9090";
+const backend = new URL(backendUrl);
 
 const nextConfig: NextConfig = {
   images: {
     remotePatterns: [
       {
-        protocol: "http",
-        hostname: "localhost",
-        port: "9090",
+        protocol: backend.protocol.replace(":", "") as "http" | "https",
+        hostname: backend.hostname,
+        port: backend.port || undefined,
         pathname: "/static/**",
       },
     ],

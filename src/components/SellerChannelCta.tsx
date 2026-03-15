@@ -4,9 +4,14 @@ import Link from "next/link";
 import { ChevronRight, Rocket } from "lucide-react";
 
 export function SellerChannelCta() {
+  const sellerUrl =
+    process.env.NEXT_PUBLIC_SELLER_URL ?? "http://localhost:3001";
+
   return (
     <Link
-      href="/seller"
+      href={sellerUrl}
+      target="_blank"
+      rel="noreferrer"
       className="group flex items-center gap-3 rounded-2xl border-2 border-[var(--primary)]/40 bg-[var(--primary)]/10 px-4 py-3 shadow-md transition-all duration-300 hover:border-[var(--primary)] hover:bg-[var(--primary)] hover:shadow-lg hover:shadow-[var(--primary)]/25 hover:scale-[1.02] active:scale-[0.99]"
     >
       <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--primary)]/20 text-[var(--primary)] transition-colors duration-300 group-hover:bg-white group-hover:text-[var(--primary)]">

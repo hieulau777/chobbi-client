@@ -4,32 +4,24 @@
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import { Bell, ShoppingCart, User, Search } from "lucide-react";
 import { API_BASE } from "@/lib/api-client";
 import { signOut, useSession } from "next-auth/react";
 import { useClientNotificationRealtime } from "@/hooks/useClientNotificationRealtime";
 import type { NotificationDto } from "@/types/notification";
 
-const CART_ITEMS = [
-  {
-    id: 1,
-    name: "Tai nghe Bluetooth",
-    price: "₫499.000",
-    image: "/file.svg",
-  },
-  {
-    id: 2,
-    name: "Bình giữ nhiệt Inox",
-    price: "₫199.000",
-    image: "/file.svg",
-  },
-  {
-    id: 3,
-    name: "Áo thun basic",
-    price: "₫149.000",
-    image: "/file.svg",
-  },
-];
+type MiniCartItemDto = {
+  productId: number;
+  productName: string;
+  imageUrl: string | null;
+  price: number | null;
+};
+
+type MiniCartResponseDto = {
+  items: MiniCartItemDto[];
+  totalItems: number;
+};
 
 interface ProfileInfoResponse {
   id: number;
@@ -49,15 +41,60 @@ function getAvatarUrl(img: string | null | undefined): string {
 }
 
 export function Header() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const sellerUrl =
+    typeof window === "undefined"
+      ? process.env.NEXT_PUBLIC_SELLER_URL ?? "http://localhost:3001"
+      : process.env.NEXT_PUBLIC_SELLER_URL ?? "http://localhost:3001";
   const { status } = useSession();
   const [notifications, setNotifications] = useState<NotificationDto[]>([]);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [toastNotification, setToastNotification] = useState<NotificationDto | null>(null);
   const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [profile, setProfile] = useState<ProfileInfoResponse | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [miniCart, setMiniCart] = useState<MiniCartResponseDto | null>(null);
+  const signingOutRef = useRef(false);
+  const [miniCartOpen, setMiniCartOpen] = useState(false);
 
   const isLoggedIn = status === "authenticated";
-  const cartCount = CART_ITEMS.length;
+
+  const handleUnauthorized = async () => {
+    if (signingOutRef.current) return;
+    signingOutRef.current = true;
+    try {
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem("chobbi_backend_token");
+      }
+      await signOut({ callbackUrl: "/login" });
+    } finally {
+      signingOutRef.current = false;
+    }
+  };
+
+  const handleSearch = () => {
+    const q = searchQuery.trim();
+    if (q) {
+      router.push(`/search?q=${encodeURIComponent(q)}`);
+    }
+  };
+
+  const handleGoToCart = () => {
+    if (typeof window === "undefined") return;
+    const token = window.localStorage.getItem("chobbi_backend_token");
+    if (!token) {
+      const params = new URLSearchParams();
+      params.set("redirect", "/cart");
+      const query = params.toString();
+      router.push(query ? `/login?${query}` : "/login");
+      return;
+    }
+    router.push("/cart");
+  };
+
+  const totalCartItems = miniCart?.totalItems ?? 0;
+  const cartCount = totalCartItems;
 
   // Chỉ hiển thị tên & avatar từ API (profile), không dùng ảnh/tên từ Google
   const displayName = profile?.name ?? "Tài khoản";
@@ -76,6 +113,10 @@ export function Header() {
           Authorization: `Bearer ${token}`,
         },
       });
+      if (res.status === 401 || res.status === 403) {
+        await handleUnauthorized();
+        return;
+      }
       if (!res.ok) return;
       const data = (await res.json()) as NotificationDto[];
       setNotifications((data ?? []).slice(0, 10));
@@ -94,11 +135,40 @@ export function Header() {
           Authorization: `Bearer ${token}`,
         },
       });
+      if (res.status === 401 || res.status === 403) {
+        await handleUnauthorized();
+        return;
+      }
       if (!res.ok) return;
       const data = (await res.json()) as ProfileInfoResponse;
       setProfile(data);
     } catch (e) {
       console.error("[Client profile] fetch failed", e);
+    }
+  };
+
+  const fetchMiniCart = async () => {
+    if (typeof window === "undefined") return;
+    const token = window.localStorage.getItem("chobbi_backend_token");
+    if (!token) return;
+    try {
+      const res = await fetch(`${API_BASE}/cart/mini`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (res.status === 401 || res.status === 403) {
+        await handleUnauthorized();
+        return;
+      }
+      if (!res.ok) return;
+      const data = (await res.json()) as MiniCartResponseDto;
+      setMiniCart({
+        items: data.items ?? [],
+        totalItems: data.totalItems ?? 0,
+      });
+    } catch (e) {
+      console.error("[Client mini-cart] fetch failed", e);
     }
   };
 
@@ -125,16 +195,115 @@ export function Header() {
   useEffect(() => {
     if (!isLoggedIn) {
       setProfile(null);
+      setMiniCart(null);
       return () => {
         if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
       };
     }
     fetchNotifications();
     fetchProfile();
+    fetchMiniCart();
     return () => {
       if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
     };
   }, [isLoggedIn]);
+
+  // Lắng nghe event thêm / xóa giỏ hàng để cập nhật mini-cart local ngay, không cần gọi API
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handleAdded = (event: Event) => {
+      const custom = event as CustomEvent<MiniCartItemDto>;
+      const payload = custom.detail;
+      if (!payload) return;
+
+      setMiniCart((prev) => {
+        const current: MiniCartResponseDto = prev ?? {
+          items: [],
+          totalItems: 0,
+        };
+        const exists = current.items.some(
+          (i) => i.productId === payload.productId,
+        );
+
+        const nextTotal = exists
+          ? current.totalItems
+          : current.totalItems + 1;
+
+        const nextItems = [
+          payload,
+          ...current.items.filter((i) => i.productId !== payload.productId),
+        ].slice(0, 3);
+
+        return {
+          items: nextItems,
+          totalItems: nextTotal,
+        };
+      });
+    };
+
+    const handleRemoved = (event: Event) => {
+      const custom = event as CustomEvent<{ productId: number }>;
+      const payload = custom.detail;
+      if (!payload) return;
+
+      setMiniCart((prev) => {
+        const current: MiniCartResponseDto = prev ?? {
+          items: [],
+          totalItems: 0,
+        };
+        const nextTotal = Math.max(0, current.totalItems - 1);
+        const nextItems = current.items.filter(
+          (i) => i.productId !== payload.productId,
+        );
+        return {
+          items: nextItems,
+          totalItems: nextTotal,
+        };
+      });
+    };
+    const handleMini = (event: Event) => {
+      const custom = event as CustomEvent<MiniCartResponseDto>;
+      const data = custom.detail;
+      if (!data) return;
+      setMiniCart({
+        items: data.items ?? [],
+        totalItems: data.totalItems ?? 0,
+      });
+    };
+
+    window.addEventListener("chobbi:cart:added", handleAdded as EventListener);
+    window.addEventListener(
+      "chobbi:cart:removed",
+      handleRemoved as EventListener,
+    );
+    window.addEventListener("chobbi:cart:mini", handleMini as EventListener);
+
+    return () => {
+      window.removeEventListener(
+        "chobbi:cart:added",
+        handleAdded as EventListener,
+      );
+      window.removeEventListener(
+        "chobbi:cart:removed",
+        handleRemoved as EventListener,
+      );
+      window.removeEventListener(
+        "chobbi:cart:mini",
+        handleMini as EventListener,
+      );
+    };
+  }, []);
+
+  // Khi chuyển sang trang khác (đặc biệt là trang đơn mua), đồng bộ lại mini cart từ API
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    if (!pathname) return;
+    // Ưu tiên gọi lại khi vào khu vực profile/orders; có thể mở rộng sau này nếu cần
+    if (pathname.startsWith("/profile")) {
+      fetchMiniCart();
+    }
+  }, [isLoggedIn, pathname]);
 
   const notificationsCount = notifications.length;
 
@@ -154,7 +323,7 @@ export function Header() {
             <p className="mt-0.5 text-sm text-[#6c757d]">{toastNotification.message}</p>
             {toastNotification.orderId != null && (
               <Link
-                href={`/orders?highlight=${toastNotification.orderId}`}
+                href={`/profile/orders?highlight=${toastNotification.orderId}`}
                 className="mt-2 inline-block text-sm font-medium text-[var(--primary)] hover:underline"
               >
                 Xem đơn #{toastNotification.orderId} →
@@ -168,7 +337,9 @@ export function Header() {
         {/* Hàng 1: Kênh bán hàng (trái) + Thông báo & Tài khoản (phải) */}
         <div className="flex items-center justify-end gap-[5px] text-xs sm:text-sm">
           <Link
-            href="/seller"
+            href={sellerUrl}
+            target="_blank"
+            rel="noreferrer"
             className="cursor-pointer font-medium text-white underline-offset-4 hover:underline"
           >
             Bán hàng cùng Chobbi
@@ -194,7 +365,7 @@ export function Header() {
                       <Bell className="h-4 w-4" aria-hidden />
                       <span className="whitespace-nowrap">Thông báo</span>
                       {notificationsCount > 0 && (
-                        <span className="absolute -right-3 -top-2 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold leading-none text-white">
+                        <span className="absolute -right-3 -top-2 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-white px-1 text-[10px] font-semibold leading-none text-[var(--primary)] shadow-sm">
                           {notificationsCount > 9 ? "9+" : notificationsCount}
                         </span>
                       )}
@@ -239,7 +410,7 @@ export function Header() {
                                   <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-[#868e96]">
                                     {n.orderId != null && (
                                       <Link
-                                        href={`/orders?highlight=${n.orderId}`}
+                                        href={`/profile/orders?highlight=${n.orderId}`}
                                         className="font-medium text-[var(--primary)] hover:underline"
                                       >
                                         Đơn #{n.orderId}
@@ -267,7 +438,7 @@ export function Header() {
 
                 {/* Tài khoản */}
                 <div className="group relative">
-                  <button className="flex cursor-pointer items-center gap-2 rounded-full bg-primary-foreground/15 px-3 py-1.5 text-xs text-white transition-colors hover:bg-primary-foreground/25 sm:text-sm">
+                  <button className="flex cursor-pointer items-center gap-2 rounded-full bg-primary-foreground/10 px-3 py-1.5 text-xs text-white transition-colors hover:bg-primary-foreground/20 sm:text-sm">
                     <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white text-[var(--primary)]">
                       {displayAvatar ? (
                         <Image
@@ -286,17 +457,17 @@ export function Header() {
                     </span>
                   </button>
 
-                  <div className="invisible absolute right-0 top-10 z-20 w-56 -translate-y-1 scale-95 transform rounded-lg border border-border/60 bg-white text-[#34302d] opacity-0 shadow-lg transition-all duration-150 group-hover:visible group-hover:translate-y-0 group-hover:scale-100 group-hover:opacity-100">
+                  <div className="invisible absolute right-0 top-10 z-20 w-56 -translate-y-1 scale-95 transform rounded-xl bg-white text-[#34302d] opacity-0 shadow-[0_8px_24px_rgba(15,23,42,0.12)] transition-all duration-150 group-hover:visible group-hover:translate-y-0 group-hover:scale-100 group-hover:opacity-100">
                     <nav className="flex flex-col gap-1 px-2 py-2 text-sm">
                       <Link
-                        href="/profile"
-                        className="cursor-pointer rounded-md px-3 py-2 hover:bg-muted"
+                        href="/profile/info"
+                        className="cursor-pointer rounded-md px-3 py-2 text-[var(--foreground)] transition-colors hover:bg-[var(--primary)]/10 hover:text-[var(--primary)]"
                       >
                         Tài khoản của tôi
                       </Link>
                       <Link
-                        href="/orders"
-                        className="cursor-pointer rounded-md px-3 py-2 hover:bg-muted"
+                        href="/profile/orders"
+                        className="cursor-pointer rounded-md px-3 py-2 text-[var(--foreground)] transition-colors hover:bg-[var(--primary)]/10 hover:text-[var(--primary)]"
                       >
                         Đơn mua
                       </Link>
@@ -354,7 +525,7 @@ export function Header() {
         </div>
 
         {/* Hàng 2: Logo (trái) + Search (giữa) + Cart (phải) */}
-        <div className="flex items-center gap-4 pb-1 px-4">
+        <div className="flex items-center gap-3 pb-1 px-4">
           <Link
             href="/"
             className="flex cursor-pointer items-center gap-2"
@@ -378,10 +549,14 @@ export function Header() {
                 <input
                   type="text"
                   placeholder="Tìm kiếm sản phẩm..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleSearch()}
                   className="w-full border-none bg-transparent text-sm text-[#34302d] placeholder:text-[#6c757d] focus:outline-none focus:ring-0"
                 />
                 <button
                   type="button"
+                  onClick={handleSearch}
                   className="flex h-9 min-w-14 cursor-pointer items-center justify-center rounded-md bg-[var(--primary)] px-4 text-white transition-colors hover:opacity-90"
                   aria-label="Tìm kiếm"
                 >
@@ -396,52 +571,96 @@ export function Header() {
             <button
               className="relative flex h-10 w-10 cursor-pointer items-center justify-center rounded-full bg-primary-foreground/15 text-white transition-colors hover:bg-primary-foreground/25"
               aria-label="Giỏ hàng"
+              type="button"
+              onClick={handleGoToCart}
+              onMouseEnter={() => {
+                setMiniCartOpen(true);
+                fetchMiniCart();
+              }}
             >
-              <ShoppingCart className="h-8 w-8" aria-hidden />
+              <ShoppingCart className="h-7 w-7" aria-hidden />
               {cartCount > 0 && (
-                <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-white text-[12px] font-semibold text-[var(--primary)]">
-                  {cartCount}
+                <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-white px-1 text-[11px] font-semibold text-[var(--primary)] shadow-sm">
+                  {cartCount > 99 ? "99+" : cartCount}
                 </span>
               )}
             </button>
 
-            <div className="invisible absolute right-0 top-11 z-20 w-80 -translate-y-1 scale-95 transform rounded-lg border border-border/60 bg-white text-[#34302d] opacity-0 shadow-lg transition-all duration-150 group-hover:visible group-hover:translate-y-0 group-hover:scale-100 group-hover:opacity-100">
-              <div className="border-b border-border/60 px-4 py-3 text-sm font-semibold text-[#34302d]">
-                Giỏ hàng
+            <div className="invisible absolute right-0 top-12 z-20 w-80 -translate-y-1 scale-95 transform rounded-xl bg-white text-[#1f2933] opacity-0 shadow-[0_4px_16px_rgba(15,23,42,0.12)] transition-all duration-150 group-hover:visible group-hover:translate-y-0 group-hover:scale-100 group-hover:opacity-100">
+              <div className="px-4 py-2 text-sm font-medium text-[var(--muted-foreground)]">
+                Sản phẩm mới thêm
               </div>
-              <ul className="space-y-2 px-3 py-3 text-sm">
-                {CART_ITEMS.slice(0, 3).map((item) => (
-                  <li
-                    key={item.id}
-                    className="flex cursor-pointer items-center gap-3 rounded-md bg-white hover:bg-muted"
-                  >
-                    <div className="relative h-10 w-10 overflow-hidden rounded-md border border-border/70 bg-muted">
-                      <Image
-                        src={item.image}
-                        alt={item.name}
-                        fill
-                        sizes="40px"
-                        className="object-cover"
-                      />
-                    </div>
-                    <div className="flex flex-1 flex-col">
-                      <span className="line-clamp-1 text-sm font-medium">
-                        {item.name}
-                      </span>
-                      <span className="mt-0.5 text-xs font-semibold text-accent">
-                        {item.price}
-                      </span>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-              <div className="border-t border-border/60 px-4 py-3">
-                <Link
-                  href="/cart"
-                  className="flex w-full cursor-pointer items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-medium transition-colors hover:bg-primary/90"
+              <div className="max-h-80 overflow-auto px-3.5 py-3 text-[13px] sm:text-sm">
+                {!miniCart || miniCart.items.length === 0 ? (
+                  <div className="py-6 text-center text-xs text-[var(--muted-foreground)]">
+                    Giỏ hàng của bạn đang trống.
+                  </div>
+                ) : (
+                  <ul className="space-y-2.5">
+                    {miniCart.items.slice(0, 3).map((item) => (
+                      <li
+                        key={item.productId}
+                        className="flex items-center gap-3 rounded-lg bg-transparent transition-colors hover:bg-[var(--muted)]/50"
+                      >
+                        <Link
+                          href={`/product/${item.productId}`}
+                          className="relative block h-12 w-12 shrink-0 overflow-hidden rounded-md bg-[var(--muted)]"
+                        >
+                          <Image
+                            src={
+                              item.imageUrl && item.imageUrl.trim()
+                                ? item.imageUrl.startsWith("http")
+                                  ? item.imageUrl
+                                  : `/api/backend/static/${
+                                      item.imageUrl.startsWith("/")
+                                        ? item.imageUrl.slice(1)
+                                        : item.imageUrl
+                                    }`
+                                : "/file.svg"
+                            }
+                            alt={item.productName}
+                            fill
+                            sizes="48px"
+                            className="object-cover"
+                          />
+                        </Link>
+                        <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
+                          <Link
+                            href={`/product/${item.productId}`}
+                            className="line-clamp-2 flex-1 text-sm font-medium text-[var(--foreground)] hover:text-[var(--primary)]"
+                          >
+                            {item.productName}
+                          </Link>
+                          {item.price != null && (
+                            <span className="ml-2 whitespace-nowrap text-sm font-semibold text-[var(--primary)]">
+                              {item.price.toLocaleString("vi-VN", {
+                                style: "currency",
+                                currency: "VND",
+                                maximumFractionDigits: 0,
+                              })}
+                            </span>
+                          )}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <div className="flex items-center justify-between px-3.5 pb-3 pt-1.5">
+                <span className="text-sm text-[var(--muted-foreground)]">
+                  {miniCart && miniCart.totalItems > miniCart.items.length
+                    ? `${miniCart.totalItems - miniCart.items.length} sản phẩm khác trong giỏ`
+                    : miniCart && miniCart.totalItems > 0
+                    ? `${miniCart.totalItems} sản phẩm trong giỏ`
+                    : "Giỏ hàng của bạn"}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleGoToCart}
+                  className="ml-3 inline-flex cursor-pointer items-center justify-center rounded-sm bg-[var(--primary)] px-4 py-1.5 text-sm font-semibold text-[var(--primary-foreground)] transition-colors hover:bg-[var(--primary)]/90"
                 >
                   Xem giỏ hàng
-                </Link>
+                </button>
               </div>
             </div>
           </div>

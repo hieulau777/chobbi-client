@@ -20,9 +20,12 @@ export function BrandFilter({
   selectedBrandIds,
   onChange,
 }: BrandFilterProps) {
+  const MAX_COLLAPSED = 10;
+
   const [brands, setBrands] = useState<BrandOption[]>([]);
   const [loading, setLoading] = useState(false);
   const [localSelectedIds, setLocalSelectedIds] = useState<number[]>(selectedBrandIds);
+  const [showAll, setShowAll] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -75,6 +78,9 @@ export function BrandFilter({
   };
 
   const hasSelection = localSelectedIds.length > 0;
+  const hasTooManyBrands = brands.length > MAX_COLLAPSED;
+  const visibleBrands =
+    showAll || !hasTooManyBrands ? brands : brands.slice(0, MAX_COLLAPSED);
 
   if (!brands.length && !loading) {
     return null;
@@ -113,25 +119,36 @@ export function BrandFilter({
             Đang tải thương hiệu...
           </p>
         ) : (
-          <div className="flex flex-wrap gap-1.5">
-            {brands.map((brand) => {
-              const active = localSelectedIds.includes(brand.id);
-              return (
-                <button
-                  key={brand.id}
-                  type="button"
-                  onClick={() => toggleBrand(brand.id)}
-                  className={`rounded-full border px-2.5 py-1 text-[10px] font-medium transition ${
-                    active
-                      ? "border-[var(--primary)] bg-[var(--primary)] text-white"
-                      : "border-[var(--border)] bg-[var(--muted)]/60 text-[var(--foreground)] hover:border-[var(--primary)] hover:bg-[var(--primary)]/10 hover:text-[var(--primary)]"
-                  }`}
-                >
-                  {brand.value}
-                </button>
-              );
-            })}
-          </div>
+          <>
+            <div className="flex flex-wrap gap-1.5">
+              {visibleBrands.map((brand) => {
+                const active = localSelectedIds.includes(brand.id);
+                return (
+                  <button
+                    key={brand.id}
+                    type="button"
+                    onClick={() => toggleBrand(brand.id)}
+                    className={`rounded-full border px-2.5 py-1 text-[10px] font-medium transition ${
+                      active
+                        ? "border-[var(--primary)] bg-[var(--primary)] text-white"
+                        : "border-[var(--border)] bg-[var(--muted)]/60 text-[var(--foreground)] hover:border-[var(--primary)] hover:bg-[var(--primary)]/10 hover:text-[var(--primary)]"
+                    }`}
+                  >
+                    {brand.value}
+                  </button>
+                );
+              })}
+            </div>
+            {hasTooManyBrands && (
+              <button
+                type="button"
+                onClick={() => setShowAll((prev) => !prev)}
+                className="mt-1.5 text-[10px] font-medium text-[var(--primary)] hover:underline"
+              >
+                {showAll ? "Rút gọn" : "Xem thêm"}
+              </button>
+            )}
+          </>
         )}
 
         <button

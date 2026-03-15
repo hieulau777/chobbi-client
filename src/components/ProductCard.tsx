@@ -53,7 +53,7 @@ export function ProductCard({
   return (
     <Link
       href={href}
-      className="group flex h-full flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-white shadow-sm transition hover:border-[var(--primary)] hover:shadow-md"
+      className="group flex h-full w-full flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-white shadow-sm transition hover:border-[var(--primary)] hover:shadow-md"
     >
       <div className="relative aspect-square w-full overflow-hidden bg-[var(--muted)]">
         <Image
@@ -68,7 +68,7 @@ export function ProductCard({
         <h2 className="line-clamp-2 min-h-[2.5rem] text-sm font-medium text-[var(--foreground)]">
           {productName}
         </h2>
-        <p className="mt-1 text-sm font-semibold text-[var(--primary)]">
+        <p className="mt-auto pt-1 text-sm font-semibold text-[var(--primary)]">
           {formatPrice(displayPrice)}
         </p>
       </div>

@@ -6,17 +6,9 @@ import { useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
 import { CreditCard, ArrowLeft } from "lucide-react";
 import { api } from "@/lib/axios";
+import { resolveBackendFileUrl } from "@/lib/file-url";
 import type { CheckoutDraft } from "@/types/checkout";
 import { clearCheckoutDraft, getCheckoutDraft } from "@/types/checkout";
-
-const FILE_BASE_URL = "http://localhost:9090/static";
-
-function resolveImageUrl(url: string | null | undefined): string {
-  if (!url) return "/file.svg";
-  if (url.startsWith("http://") || url.startsWith("https://")) return url;
-  if (url.startsWith("/")) return url;
-  return `${FILE_BASE_URL}/${url}`;
-}
 
 const formatPrice = (value: number) =>
   new Intl.NumberFormat("vi-VN", {
@@ -95,6 +87,7 @@ export default function CheckoutPage() {
   const [selectedPayment, setSelectedPayment] = useState<string>("cod");
   const [placing, setPlacing] = useState(false);
   const [placeError, setPlaceError] = useState<string | null>(null);
+  const [placeSuccess, setPlaceSuccess] = useState<string | null>(null);
   const [addresses, setAddresses] = useState<AddressResponse[]>([]);
   const [addressLoading, setAddressLoading] = useState(true);
   const [addressError, setAddressError] = useState<string | null>(null);
@@ -438,7 +431,7 @@ export default function CheckoutPage() {
                       >
                         <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-[var(--muted)]">
                           <img
-                            src={resolveImageUrl(item.imageUrl)}
+                            src={resolveBackendFileUrl(item.imageUrl)}
                             alt=""
                             className="h-full w-full object-cover"
                           />
@@ -544,6 +537,11 @@ export default function CheckoutPage() {
                   {placeError}
                 </p>
               )}
+              {placeSuccess && (
+                <p className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+                  {placeSuccess}
+                </p>
+              )}
               <button
                 type="button"
                 disabled={!token || placing || !selectedAddressId}
@@ -568,8 +566,54 @@ export default function CheckoutPage() {
                       headers: { Authorization: `Bearer ${token}` },
                     });
                     clearCheckoutDraft();
-                    alert(`Đặt hàng thành công. Mã đơn: ${data?.code ?? data?.orderGroupId ?? ""}`);
-                    router.push("/cart");
+
+                    const highlightId =
+                      data?.code ?? data?.orderGroupId ?? "";
+
+                    // Hiển thị thông báo thành công ngay tại trang thanh toán
+                    setPlaceSuccess(
+                      `Đặt hàng thành công${
+                        highlightId ? ` (#${highlightId})` : ""
+                      }. Đang chuyển đến trang đơn mua...`,
+                    );
+
+                    // Sau khi thành công, gọi API mini-cart và phát event để Header sync lại
+                    try {
+                      if (typeof window !== "undefined") {
+                        const tokenInStorage =
+                          window.localStorage.getItem("chobbi_backend_token");
+                        if (tokenInStorage) {
+                          const res = await fetch("/api/backend/cart/mini", {
+                            headers: {
+                              Authorization: `Bearer ${tokenInStorage}`,
+                            },
+                          });
+                          if (res.ok) {
+                            const mini = await res.json();
+                            window.dispatchEvent(
+                              new CustomEvent("chobbi:cart:mini", {
+                                detail: mini,
+                              }),
+                            );
+                          }
+                        }
+                      }
+                    } catch {
+                      // Nếu sync mini-cart lỗi thì bỏ qua, lần sau header hover sẽ tự fetch lại
+                    }
+
+                    // Sau một khoảng ngắn mới redirect sang trang đơn mua (tab Chờ xử lý)
+                    setTimeout(() => {
+                      const params = new URLSearchParams();
+                      params.set("tab", "PENDING");
+                      if (highlightId)
+                        params.set("highlight", String(highlightId));
+                      router.push(
+                        `/profile/orders${
+                          params.toString() ? `?${params.toString()}` : ""
+                        }`,
+                      );
+                    }, 1800);
                   } catch (e: unknown) {
                     const err = e as { response?: { data?: { message?: string }; status?: number } };
                     setPlaceError(err?.response?.data?.message ?? "Không thể đặt hàng. Vui lòng thử lại.");
