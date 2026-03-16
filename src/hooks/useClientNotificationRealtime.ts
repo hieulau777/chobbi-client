@@ -8,7 +8,8 @@ import type { NotificationDto } from "@/types/notification";
 const TOKEN_KEY = "chobbi_backend_token";
 
 export function useClientNotificationRealtime(
-  onNotification: (dto: NotificationDto) => void
+  onNotification: (dto: NotificationDto) => void,
+  enabled = true
 ) {
   const clientRef = useRef<Client | null>(null);
   const onNotificationRef = useRef(onNotification);
@@ -16,6 +17,14 @@ export function useClientNotificationRealtime(
 
   const connect = useCallback(() => {
     if (typeof window === "undefined") return;
+    if (clientRef.current) {
+      try {
+        clientRef.current.deactivate();
+      } catch {
+        // ignore
+      }
+      clientRef.current = null;
+    }
     const token = window.localStorage.getItem(TOKEN_KEY);
     const client = createNotificationClient(token, (dto) => {
       onNotificationRef.current(dto);
@@ -27,13 +36,23 @@ export function useClientNotificationRealtime(
   }, []);
 
   useEffect(() => {
+    if (!enabled) return;
     connect();
-    return () => {
-      if (clientRef.current) {
-        clientRef.current.deactivate();
-        clientRef.current = null;
-      }
+    const onProfileOrToken = () => {
+      connect();
     };
-  }, [connect]);
+    window.addEventListener("chobbi:profile:updated", onProfileOrToken);
+    return () => {
+      window.removeEventListener("chobbi:profile:updated", onProfileOrToken);
+      if (clientRef.current) {
+        try {
+          clientRef.current.deactivate();
+        } catch {
+          // ignore
+        }
+        clientRef.current = null;
+      };
+    };
+  }, [enabled, connect]);
 }
 

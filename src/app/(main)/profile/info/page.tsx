@@ -197,7 +197,11 @@ export default function ProfileInfoPage() {
 
       setSaveMessage("Cập nhật hồ sơ thành công.");
       setSaveStatus("success");
-      window.location.reload();
+      setAvatarFile(null);
+      await loadProfile();
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("chobbi:profile:updated"));
+      }
     } catch (error) {
       console.error("Failed to update profile", error);
       setSaveMessage("Cập nhật hồ sơ thất bại. Vui lòng thử lại.");

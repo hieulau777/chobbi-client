@@ -49,6 +49,7 @@ export function AlertTokenAfterAuth() {
         if (res.ok && data.token) {
           if (typeof window !== "undefined") {
             window.localStorage.setItem("chobbi_backend_token", data.token);
+            window.dispatchEvent(new CustomEvent("chobbi:profile:updated"));
           }
           await update({
             backendToken: data.token,

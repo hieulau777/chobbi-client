@@ -190,7 +190,24 @@ export function Header() {
     });
   };
 
-  useClientNotificationRealtime(handleRealtimeNotification);
+  useClientNotificationRealtime(handleRealtimeNotification, isLoggedIn);
+
+  // Cập nhật tên & avatar trên header ngay khi đăng nhập/đăng ký hoặc đổi profile (không cần reload trang)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleProfileUpdated = (event: Event) => {
+      const custom = event as CustomEvent<ProfileInfoResponse | undefined>;
+      if (custom.detail != null) {
+        setProfile(custom.detail);
+      } else {
+        fetchProfile();
+      }
+    };
+    window.addEventListener("chobbi:profile:updated", handleProfileUpdated as EventListener);
+    return () => {
+      window.removeEventListener("chobbi:profile:updated", handleProfileUpdated as EventListener);
+    };
+  }, []);
 
   useEffect(() => {
     if (!isLoggedIn) {
